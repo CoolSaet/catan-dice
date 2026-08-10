@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Catan Dice – Configuration</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; max-width: 520px; margin: 30px auto; padding: 0 16px; background: #f4f0e8; color: #333; }
+  h1 { color: #b44; text-align: center; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: .8em; font-weight: bold; }
+  .badge.ap  { background: #f9a; color: #800; }
+  .badge.sta { background: #9f9; color: #040; }
+  fieldset { border: 1px solid #ccc; border-radius: 6px; margin: 16px 0; padding: 12px 16px; background: #fff; }
+  legend { font-weight: bold; padding: 0 6px; }
+  label { display: block; margin: 10px 0 2px; font-size: .9em; color: #555; }
+  input[type=text], input[type=password], input[type=url] {
+    width: 100%; padding: 7px 10px; border: 1px solid #bbb; border-radius: 4px; font-size: 1em;
+  }
+  button { display: block; width: 100%; padding: 10px; margin-top: 14px; border: none; border-radius: 6px;
+           font-size: 1em; cursor: pointer; }
+  #saveBtn  { background: #b44; color: #fff; }
+  #saveBtn:hover  { background: #933; }
+  #rollBtn  { background: #4a4; color: #fff; margin-top: 20px; font-size: 1.1em; }
+  #rollBtn:hover  { background: #282; }
+  #msg { text-align: center; margin-top: 8px; font-size: .9em; color: #444; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<h1>🎲 Catan Dice</h1>
+<p style="text-align:center">
+  Current mode: <span id="modeLabel" class="badge">…</span>
+</p>
+
+<fieldset>
+  <legend>📡 AP (Access Point) Mode</legend>
+  <label>SSID</label>
+  <input type="text" id="apSsid" maxlength="31" placeholder="CatanDice"/>
+  <label>Password</label>
+  <input type="password" id="apPassword" maxlength="63" placeholder="(min 8 chars or blank for open)"/>
+  <label>Roll URL (used in AP mode)</label>
+  <input type="url" id="urlAp" maxlength="255" placeholder="http://192.168.4.2/roll"/>
+</fieldset>
+
+<fieldset>
+  <legend>🏠 Home WiFi (STA) Mode</legend>
+  <label>SSID</label>
+  <input type="text" id="staSsid" maxlength="31" placeholder="HomeNetwork"/>
+  <label>Password</label>
+  <input type="password" id="staPassword" maxlength="63"/>
+  <label>Roll URL (used in STA mode)</label>
+  <input type="url" id="urlSta" maxlength="255" placeholder="http://192.168.1.100/roll"/>
+</fieldset>
+
+<button id="saveBtn">💾 Save Configuration</button>
+<div id="msg"></div>
+
+<button id="rollBtn">🎲 Roll Dice Now!</button>
+
+<script>
+const $ = id => document.getElementById(id);
+const fields = ['apSsid','apPassword','urlAp','staSsid','staPassword','urlSta'];
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/config');
+    const d = await r.json();
+    fields.forEach(k => { if (d[k] !== undefined) $(k).value = d[k]; });
+    const lbl = $('modeLabel');
+    lbl.textContent = d.mode === 'ap' ? 'AP' : 'STA';
+    lbl.className   = 'badge ' + (d.mode === 'ap' ? 'ap' : 'sta');
+  } catch(e) { $('msg').textContent = 'Could not load config: ' + e; }
+}
+
+$('saveBtn').addEventListener('click', async () => {
+  const payload = {};
+  fields.forEach(k => payload[k] = $(k).value);
+  try {
+    const r = await fetch('/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    $('msg').textContent = d.status === 'ok' ? '✅ Saved! Restart ESP to apply WiFi changes.' : '❌ Error saving.';
+  } catch(e) { $('msg').textContent = '❌ ' + e; }
+});
+
+$('rollBtn').addEventListener('click', async () => {
+  try {
+    const r = await fetch('/roll', { method: 'POST' });
+    const d = await r.json();
+    $('msg').textContent = d.status === 'rolling' ? '🎲 Rolling!' : '❌ ' + JSON.stringify(d);
+  } catch(e) { $('msg').textContent = '❌ ' + e; }
+});
+
+loadConfig();
+</script>
+</body>
+</html>
