@@ -587,6 +587,158 @@ def build_die():
 
 
 # ---------------------------------------------------------------------------
+# Build the pip plunger (pushable single-dot keycap)
+# ---------------------------------------------------------------------------
+
+def build_pip_plunger():
+    """
+    A cylindrical plunger that sits in the Ø 13 mm button hole on the top face.
+
+    Cross-section (side view, centred on Z axis, Z=0 is die top surface):
+
+      ┌─────────────────────────────┐  ← pip dome (raised hemisphere on top)
+      │         CAP DISC            │  z = +1.5 mm above die surface
+      └──────────────────────────...┘  z = 0 (flush with top face outer)
+             │  stem │                 z = -3 mm  (through the wall)
+        ┌────┴────────┴────┐           z = -3 mm  (flange – stops plunger falling out)
+        │     FLANGE       │           z = -4.5 mm
+        └──────────────────┘
+             │  stem │                 continues down to button
+             └───────┘                 z = -STEM_LEN (tip that presses button)
+
+    Clearances (all diameters):
+      Hole Ø 13 mm (radius 6.5 mm)
+      Cap  Ø 12.6 mm (radius 6.3 mm)  – 0.4 mm radial clearance
+      Flange Ø 15 mm (radius 7.5 mm)  – sits against inner top-face surface
+      Stem Ø 4 mm (radius 2 mm)        – slender, not to interfere with PCB
+    """
+    m = Mesh()
+    SEG = 48
+
+    # Key dimensions
+    CAP_R       = BTN_R - 0.2       # 6.3 mm  – fits through the hole
+    CAP_T       = 1.5               # cap disc thickness above the hole top
+    CAP_BASE_Z  = 0.0               # z=0 = top of die face (outer surface)
+    CAP_TOP_Z   = CAP_BASE_Z + CAP_T
+
+    FLANGE_R    = BTN_R + 1.0       # 7.5 mm  – wider than hole → retains plunger
+    FLANGE_T    = 1.5               # flange thickness
+    FLANGE_TOP_Z  = CAP_BASE_Z - WALL       # flush with inside surface (−3 mm)
+    FLANGE_BOT_Z  = FLANGE_TOP_Z - FLANGE_T
+
+    STEM_R      = 2.0               # stem radius
+    # Button is a standard 12 mm tactile; actuator height ≈ 3.5 mm above PCB.
+    # PCB sits ~2 mm below inner top face → button actuator at about −5.5 mm.
+    STEM_BOT_Z  = -8.0              # stem tip reaches well into the cavity
+
+    # Pip dome on top of cap  (same size as die-face pips)
+    PIP_DOME_R  = PIP_R             # 2.5 mm dome radius
+    PIP_DOME_H  = PIP_R * 0.9      # 2.25 mm – flatter than a full hemisphere
+    PIP_RINGS   = 12
+    PIP_SEG     = SEG
+
+    # ── Cap top face (annulus: full disc minus nothing, just a closed circle) ─
+    # We build it as a filled disc at CAP_TOP_Z with a pip-dome indent/bump.
+
+    def add_filled_disc(z, r, flip=False, seg=SEG):
+        pts = [(r*math.cos(2*math.pi*i/seg), r*math.sin(2*math.pi*i/seg), z)
+               for i in range(seg)]
+        for i in range(1, seg - 1):
+            if flip:
+                m.add_tri(pts[0], pts[i + 1], pts[i])
+            else:
+                m.add_tri(pts[0], pts[i], pts[i + 1])
+
+    # Cap bottom face (sits at CAP_BASE_Z, ring between STEM_R and CAP_R)
+    def add_annulus(z, r_inner, r_outer, flip=False, seg=SEG):
+        for i in range(seg):
+            j = (i + 1) % seg
+            a0 = 2*math.pi*i/seg
+            a1 = 2*math.pi*j/seg
+            xi0, yi0 = r_inner*math.cos(a0), r_inner*math.sin(a0)
+            xi1, yi1 = r_inner*math.cos(a1), r_inner*math.sin(a1)
+            xo0, yo0 = r_outer*math.cos(a0), r_outer*math.sin(a0)
+            xo1, yo1 = r_outer*math.cos(a1), r_outer*math.sin(a1)
+            if flip:
+                m.add_quad((xo0,yo0,z),(xi0,yi0,z),(xi1,yi1,z),(xo1,yo1,z))
+            else:
+                m.add_quad((xo0,yo0,z),(xo1,yo1,z),(xi1,yi1,z),(xi0,yi0,z))
+
+    # ── Cap outer cylindrical wall ───────────────────────────────────────────
+    cap_bot = [(CAP_R*math.cos(2*math.pi*i/SEG),
+                CAP_R*math.sin(2*math.pi*i/SEG),
+                CAP_BASE_Z) for i in range(SEG)]
+    cap_top = [(CAP_R*math.cos(2*math.pi*i/SEG),
+                CAP_R*math.sin(2*math.pi*i/SEG),
+                CAP_TOP_Z) for i in range(SEG)]
+    tube(m, cap_bot, cap_top)
+
+    # ── Cap top face (filled disc) ───────────────────────────────────────────
+    add_filled_disc(CAP_TOP_Z, CAP_R, flip=False)
+
+    # ── Pip dome on cap top (raised hemisphere) ───────────────────────────────
+    for ir in range(PIP_RINGS):
+        lat0 = math.pi / 2 * ir       / PIP_RINGS
+        lat1 = math.pi / 2 * (ir + 1) / PIP_RINGS
+        r0 = PIP_DOME_R * math.cos(lat0);  z0 = CAP_TOP_Z + PIP_DOME_H * math.sin(lat0)
+        r1 = PIP_DOME_R * math.cos(lat1);  z1 = CAP_TOP_Z + PIP_DOME_H * math.sin(lat1)
+        ring0 = [(r0*math.cos(2*math.pi*j/PIP_SEG),
+                  r0*math.sin(2*math.pi*j/PIP_SEG), z0) for j in range(PIP_SEG)]
+        ring1 = [(r1*math.cos(2*math.pi*j/PIP_SEG),
+                  r1*math.sin(2*math.pi*j/PIP_SEG), z1) for j in range(PIP_SEG)]
+        if ir < PIP_RINGS - 1:
+            tube(m, ring0, ring1, flip=False)
+        else:
+            pole = (0.0, 0.0, CAP_TOP_Z + PIP_DOME_H)
+            for j in range(PIP_SEG):
+                jn = (j + 1) % PIP_SEG
+                m.add_tri(ring0[j], ring0[jn], pole)
+    # close pip dome base (annulus on cap top between pip base and edge)
+    add_annulus(CAP_TOP_Z, PIP_DOME_R, CAP_R, flip=True)
+
+    # ── Cap bottom face (annulus stem→cap edge) ───────────────────────────────
+    add_annulus(CAP_BASE_Z, STEM_R, CAP_R, flip=True)
+
+    # ── Stem outer wall from cap base down to flange top ─────────────────────
+    stem_top = [(STEM_R*math.cos(2*math.pi*i/SEG),
+                 STEM_R*math.sin(2*math.pi*i/SEG),
+                 CAP_BASE_Z) for i in range(SEG)]
+    flange_top_pts = [(STEM_R*math.cos(2*math.pi*i/SEG),
+                       STEM_R*math.sin(2*math.pi*i/SEG),
+                       FLANGE_TOP_Z) for i in range(SEG)]
+    tube(m, flange_top_pts, stem_top)   # outward normal = outward
+
+    # ── Flange top face (annulus stem→flange edge) ────────────────────────────
+    add_annulus(FLANGE_TOP_Z, STEM_R, FLANGE_R, flip=True)
+
+    # ── Flange outer wall ─────────────────────────────────────────────────────
+    flange_outer_top = [(FLANGE_R*math.cos(2*math.pi*i/SEG),
+                         FLANGE_R*math.sin(2*math.pi*i/SEG),
+                         FLANGE_TOP_Z) for i in range(SEG)]
+    flange_outer_bot = [(FLANGE_R*math.cos(2*math.pi*i/SEG),
+                         FLANGE_R*math.sin(2*math.pi*i/SEG),
+                         FLANGE_BOT_Z) for i in range(SEG)]
+    tube(m, flange_outer_bot, flange_outer_top)
+
+    # ── Flange bottom face (annulus stem→flange edge) ─────────────────────────
+    add_annulus(FLANGE_BOT_Z, STEM_R, FLANGE_R, flip=False)
+
+    # ── Stem continues from flange bottom down to tip ────────────────────────
+    stem_flange_bot = [(STEM_R*math.cos(2*math.pi*i/SEG),
+                        STEM_R*math.sin(2*math.pi*i/SEG),
+                        FLANGE_BOT_Z) for i in range(SEG)]
+    stem_tip_pts    = [(STEM_R*math.cos(2*math.pi*i/SEG),
+                        STEM_R*math.sin(2*math.pi*i/SEG),
+                        STEM_BOT_Z) for i in range(SEG)]
+    tube(m, stem_tip_pts, stem_flange_bot)
+
+    # ── Stem tip (flat circle) ────────────────────────────────────────────────
+    add_filled_disc(STEM_BOT_Z, STEM_R, flip=True)
+
+    return m
+
+
+# ---------------------------------------------------------------------------
 # Build the snap-fit lid
 # ---------------------------------------------------------------------------
 
@@ -629,5 +781,9 @@ if __name__ == "__main__":
     print("Building lid …")
     lid = build_lid()
     lid.save(os.path.join(out_dir, "dice_lid.stl"))
+
+    print("Building pip plunger …")
+    plunger = build_pip_plunger()
+    plunger.save(os.path.join(out_dir, "dice_pip_plunger.stl"))
 
     print("Done.")

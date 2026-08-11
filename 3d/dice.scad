@@ -170,8 +170,55 @@ module die_lid() {
     }
 }
 
+// ── Pip plunger (pushable single-dot keycap) ─────────────────────────────────
+//
+// Slides into the Ø 13 mm button hole on the top face.
+// Z=0 = outer die top surface.
+//
+//   CAP_R    = BTN_R - 0.2 = 6.3 mm  (fits through the hole with 0.4 mm clearance)
+//   FLANGE_R = BTN_R + 1.0 = 7.5 mm  (wider than hole → retains plunger inside die)
+//   STEM_R   = 2 mm                   (slender stem to actuate the button)
+//   STEM_LEN = 8 mm                   (reaches down to the button actuator)
+//
+module pip_plunger() {
+    CAP_R      = BTN_R - 0.2;
+    CAP_T      = 1.5;
+    FLANGE_R   = BTN_R + 1.0;
+    FLANGE_T   = 1.5;
+    FLANGE_Z   = -WALL;          // sits against inner top-face surface
+    STEM_R     = 2.0;
+    STEM_LEN   = 8.0;
+    DOME_R     = PIP_R;
+    DOME_H     = PIP_R * 0.9;
+
+    union() {
+        // Cap disc
+        cylinder(h=CAP_T, r=CAP_R, center=false);
+
+        // Pip dome on top of cap
+        translate([0, 0, CAP_T])
+            scale([1, 1, DOME_H / DOME_R])
+                sphere(r=DOME_R);
+
+        // Stem from cap base down through wall to flange
+        translate([0, 0, FLANGE_Z - FLANGE_T])
+            cylinder(h=-(FLANGE_Z - FLANGE_T), r=STEM_R, center=false);
+
+        // Flange (retaining collar)
+        translate([0, 0, FLANGE_Z - FLANGE_T])
+            cylinder(h=FLANGE_T, r=FLANGE_R, center=false);
+
+        // Stem continues below flange to button actuator
+        translate([0, 0, -STEM_LEN])
+            cylinder(h=STEM_LEN - WALL - FLANGE_T, r=STEM_R, center=false);
+    }
+}
+
 // ── Render ────────────────────────────────────────────────────────────────────
 die_shell();
 
-// Uncomment to also render the lid alongside the shell:
+// Uncomment to render lid alongside shell:
 // translate([OUTER_SIZE + 5, 0, 0]) die_lid();
+
+// Uncomment to render pip plunger alongside shell:
+// translate([0, OUTER_SIZE + 5, 0]) pip_plunger();
