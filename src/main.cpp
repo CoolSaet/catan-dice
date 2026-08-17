@@ -32,8 +32,8 @@ struct Config {
     char apPassword[64] = "catandice";
 
     // STA profile 1 (home WiFi)
-    char staLocalCatanSsid[32]     = "";
-    char staLocalCatanPassword[64] = "";
+    char staLocalCatanSsid[32]     = "LocalCatanWiFi";
+    char staLocalCatanPassword[64] = "LocalCatanPass";
 
     // STA profile 2 (secondary WiFi)
     char staHomeSsid[32]     = "";
@@ -62,17 +62,18 @@ void loadConfig() {
     if (deserializeJson(doc, f) != DeserializationError::Ok) { f.close(); return; }
     f.close();
 
-    strlcpy(cfg.apSsid,      doc["apSsid"]      | cfg.apSsid,      sizeof(cfg.apSsid));
-    strlcpy(cfg.apPassword,  doc["apPassword"]  | cfg.apPassword,  sizeof(cfg.apPassword));
-    strlcpy(cfg.staLocalCatanSsid,     doc["staLocalCatanSsid"]     | cfg.staLocalCatanSsid,     sizeof(cfg.staLocalCatanSsid));
-    strlcpy(cfg.staLocalCatanPassword, doc["staLocalCatanPassword"] | cfg.staLocalCatanPassword,  sizeof(cfg.staLocalCatanPassword));
-    strlcpy(cfg.staHomeSsid,    doc["staHomeSsid"]    | cfg.staHomeSsid,    sizeof(cfg.staHomeSsid));
-    strlcpy(cfg.staHomePassword,doc["staHomePassword"]| cfg.staHomePassword,sizeof(cfg.staHomePassword));
+    strlcpy(cfg.apSsid,                 doc["apSsid"]                   | cfg.apSsid,               sizeof(cfg.apSsid));
+    strlcpy(cfg.apPassword,             doc["apPassword"]               | cfg.apPassword,           sizeof(cfg.apPassword));
+    strlcpy(cfg.staLocalCatanSsid,      doc["staLocalCatanSsid"]        | cfg.staLocalCatanSsid,    sizeof(cfg.staLocalCatanSsid));
+    strlcpy(cfg.staLocalCatanPassword,  doc["staLocalCatanPassword"]    | cfg.staLocalCatanPassword,sizeof(cfg.staLocalCatanPassword));
+    strlcpy(cfg.staHomeSsid,            doc["staHomeSsid"]              | cfg.staHomeSsid,          sizeof(cfg.staHomeSsid));
+    strlcpy(cfg.staHomePassword,        doc["staHomePassword"]          | cfg.staHomePassword,      sizeof(cfg.staHomePassword));
+    strlcpy(cfg.urlLocalCatanSta,       doc["urlLocalCatanSta"]         | cfg.urlLocalCatanSta,     sizeof(cfg.urlLocalCatanSta));
+    strlcpy(cfg.urlHomeSta,             doc["urlHomeSta"]               | cfg.urlHomeSta,           sizeof(cfg.urlHomeSta));    
     
     cfg.staPrimary = doc["staPrimary"] | cfg.staPrimary;
     if (cfg.staPrimary != 1 && cfg.staPrimary != 2) cfg.staPrimary = 1;
-    strlcpy(cfg.urlLocalCatanSta, doc["urlLocalCatanSta"] | cfg.urlLocalCatanSta, sizeof(cfg.urlLocalCatanSta));
-    strlcpy(cfg.urlHomeSta,       doc["urlHomeSta"]       | cfg.urlHomeSta,       sizeof(cfg.urlHomeSta)); 
+
 }
 
 void saveConfig() {
@@ -97,7 +98,7 @@ void saveConfig() {
 // HTTP GET to roll URL 
 void rollDice() {
 
-    const char* url = (apMode || cfg.staPrimary == 1) ? cfg.urlLocalCatanSta : cfg.urlHomeSta;
+    const char* url = (cfg.staPrimary == 1) ? cfg.urlLocalCatanSta : cfg.urlHomeSta;
     if (strlen(url) == 0) {
         Serial.println("[roll] URL not configured");
         return;
@@ -128,16 +129,13 @@ void handleRoot() {
 
 void handleGetConfig() {
     StaticJsonDocument<768> doc;
-    doc["apSsid"]      = cfg.apSsid;
-    doc["apPassword"]  = cfg.apPassword;
-    doc["staLocalCatanSsid"]     = cfg.staLocalCatanSsid;
-    doc["staLocalCatanPassword"] = cfg.staLocalCatanPassword;
-    doc["staHomeSsid"]    = cfg.staHomeSsid;
-    doc["staHomePassword"] = cfg.staHomePassword;
-    doc["staPrimary"]  = cfg.staPrimary;
-    doc["urlLocalCatanSta"] = cfg.urlLocalCatanSta;
-    doc["urlHomeSta"]       = cfg.urlHomeSta;
-    doc["mode"]        = apMode ? "ap" : "sta";
+    doc["apSsid"]                   = cfg.apSsid;
+    doc["staLocalCatanSsid"]        = cfg.staLocalCatanSsid;
+    doc["staHomeSsid"]              = cfg.staHomeSsid;
+    doc["staPrimary"]               = cfg.staPrimary;
+    doc["urlLocalCatanSta"]         = cfg.urlLocalCatanSta;
+    doc["urlHomeSta"]               = cfg.urlHomeSta;
+    doc["mode"]                     = apMode ? "ap" : "sta";
 
     String out;
     serializeJson(doc, out);
@@ -153,12 +151,12 @@ void handleSaveConfig() {
         return;
     }
 
-    if (doc.containsKey("apSsid"))                  strlcpy(cfg.apSsid,                 doc["apSsid"],      sizeof(cfg.apSsid));
-    if (doc.containsKey("apPassword"))              strlcpy(cfg.apPassword,             doc["apPassword"],  sizeof(cfg.apPassword));
-    if (doc.containsKey("staLocalCatanSsid"))       strlcpy(cfg.staLocalCatanSsid,      doc["staLocalCatanSsid"],     sizeof(cfg.staLocalCatanSsid));
-    if (doc.containsKey("staLocalCatanPassword"))   strlcpy(cfg.staLocalCatanPassword,  doc["staLocalCatanPassword"], sizeof(cfg.staLocalCatanPassword));
-    if (doc.containsKey("staHomeSsid"))             strlcpy(cfg.staHomeSsid,            doc["staHomeSsid"],    sizeof(cfg.staHomeSsid));
-    if (doc.containsKey("staHomePassword"))         strlcpy(cfg.staHomePassword,        doc["staHomePassword"],sizeof(cfg.staHomePassword));
+    if (doc.containsKey("apSsid"))                  strlcpy(cfg.apSsid,                 doc["apSsid"],                  sizeof(cfg.apSsid));
+    if (doc.containsKey("apPassword"))              strlcpy(cfg.apPassword,             doc["apPassword"],              sizeof(cfg.apPassword));
+    if (doc.containsKey("staLocalCatanSsid"))       strlcpy(cfg.staLocalCatanSsid,      doc["staLocalCatanSsid"],       sizeof(cfg.staLocalCatanSsid));
+    if (doc.containsKey("staLocalCatanPassword"))   strlcpy(cfg.staLocalCatanPassword,  doc["staLocalCatanPassword"],   sizeof(cfg.staLocalCatanPassword));
+    if (doc.containsKey("staHomeSsid"))             strlcpy(cfg.staHomeSsid,            doc["staHomeSsid"],             sizeof(cfg.staHomeSsid));
+    if (doc.containsKey("staHomePassword"))         strlcpy(cfg.staHomePassword,        doc["staHomePassword"],         sizeof(cfg.staHomePassword));
     if (doc.containsKey("staPrimary")) {
         int primary = doc["staPrimary"];
         if (primary == 1 || primary == 2) cfg.staPrimary = primary;

@@ -17,6 +17,10 @@
   input[type=text], input[type=password], input[type=url] {
     width: 100%; padding: 7px 10px; border: 1px solid #bbb; border-radius: 4px; font-size: 1em;
   }
+  .password-row { display: flex; gap: 8px; align-items: center; }
+  .password-row input { flex: 1; }
+  .change-password-btn { width: auto; margin: 0; padding: 7px 10px; font-size: .9em; background: #ddd; color: #333; }
+  .change-password-btn:hover { background: #ccc; }
   button { display: block; width: 100%; padding: 10px; margin-top: 14px; border: none; border-radius: 6px;
            font-size: 1em; cursor: pointer; }
   #saveBtn  { background: #b44; color: #fff; }
@@ -37,7 +41,10 @@
   <label>SSID</label>
   <input type="text" id="apSsid" maxlength="31" placeholder="CatanDice"/>
   <label>Password</label>
-  <input type="password" id="apPassword" maxlength="63" placeholder="(min 8 chars or blank for open)"/>
+  <div class="password-row">
+    <input type="password" id="apPassword" maxlength="63" placeholder="(min 8 chars or blank for open)" disabled/>
+    <button type="button" class="change-password-btn" data-password="apPassword">Change</button>
+  </div>
 </fieldset>
 
 <fieldset>
@@ -56,30 +63,40 @@
     Home WiFi
   </label>
 
+  <hr />
+  
   <label>Local Catan WiFi SSID</label>
   <input type="text" id="staLocalCatanSsid" maxlength="31" placeholder="HomeNetwork"/>
   <label>Local Catan WiFi Password</label>
-  <input type="password" id="staLocalCatanPassword" maxlength="63"/>
+  <div class="password-row">
+    <input type="password" id="staLocalCatanPassword" maxlength="63" disabled/>
+    <button type="button" class="change-password-btn" data-password="staLocalCatanPassword">Change</button>
+  </div>
   <label>Roll URL (used in STA mode)</label>
   <input type="url" id="urlLocalCatanSta" maxlength="255" placeholder="http://192.168.4.1/rollDice"/>
+
+  <hr />
 
   <label>Home WiFi SSID</label>
   <input type="text" id="staHomeSsid" maxlength="31" placeholder="BackupNetwork"/>
   <label>Home WiFi Password</label>
-  <input type="password" id="staHomePassword" maxlength="63"/>
+  <div class="password-row">
+    <input type="password" id="staHomePassword" maxlength="63" disabled/>
+    <button type="button" class="change-password-btn" data-password="staHomePassword">Change</button>
+  </div>
   <label>Roll URL (used in STA mode)</label>
   <input type="url" id="urlHomeSta" maxlength="255" placeholder="http://catan.mydomain.eu/rollDice"/>
 
+  
 </fieldset>
 
 <button id="saveBtn">💾 Save Configuration</button>
 <div id="msg"></div>
 
-<button id="rollBtn">🎲 Roll Dice Now!</button>
-
 <script>
 const $ = id => document.getElementById(id);
-const fields = ['apSsid','apPassword','staLocalCatanSsid','staLocalCatanPassword','staHomeSsid','staHomePassword','urlLocalCatanSta','urlHomeSta'];
+const fields = ['apSsid','staLocalCatanSsid','staHomeSsid','urlLocalCatanSta','urlHomeSta'];
+const changedPasswords = new Set();
 
 async function loadConfig() {
   try {
@@ -98,6 +115,7 @@ async function loadConfig() {
 $('saveBtn').addEventListener('click', async () => {
   const payload = {};
   fields.forEach(k => payload[k] = $(k).value);
+  changedPasswords.forEach(k => payload[k] = $(k).value);
   const primary = document.querySelector('input[name="staPrimary"]:checked');
   payload.staPrimary = primary ? Number(primary.value) : 1;
   try {
@@ -111,12 +129,21 @@ $('saveBtn').addEventListener('click', async () => {
   } catch(e) { $('msg').textContent = '❌ ' + e; }
 });
 
-$('rollBtn').addEventListener('click', async () => {
-  try {
-    const r = await fetch('/roll', { method: 'POST' });
-    const d = await r.json();
-    $('msg').textContent = d.status === 'rolling' ? '🎲 Rolling!' : '❌ ' + JSON.stringify(d);
-  } catch(e) { $('msg').textContent = '❌ ' + e; }
+document.querySelectorAll('.change-password-btn').forEach(button => {
+  button.addEventListener('click', () => {
+    const input = $(button.dataset.password);
+    const changing = !changedPasswords.has(input.id);
+    input.value = '';
+    input.disabled = !changing;
+    if (changing) {
+      input.focus();
+      changedPasswords.add(input.id);
+      button.textContent = 'Cancel';
+    } else {
+      changedPasswords.delete(input.id);
+      button.textContent = 'Change';
+    }
+  });
 });
 
 loadConfig();
