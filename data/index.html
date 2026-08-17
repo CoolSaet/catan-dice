@@ -90,12 +90,23 @@
   
 </fieldset>
 
+<fieldset>
+  <legend>Web Server Authentication</legend>
+  <label>Username</label>
+  <input type="text" id="webUsername" maxlength="31" autocomplete="username"/>
+  <label>Password</label>
+  <div class="password-row">
+    <input type="password" id="webPassword" maxlength="63" autocomplete="new-password" disabled/>
+    <button type="button" class="change-password-btn" data-password="webPassword">Change</button>
+  </div>
+</fieldset>
+
 <button id="saveBtn">💾 Save Configuration</button>
 <div id="msg"></div>
 
 <script>
 const $ = id => document.getElementById(id);
-const fields = ['apSsid','staLocalCatanSsid','staHomeSsid','urlLocalCatanSta','urlHomeSta'];
+const fields = ['apSsid','staLocalCatanSsid','staHomeSsid','urlLocalCatanSta','urlHomeSta','webUsername'];
 const changedPasswords = new Set();
 
 async function loadConfig() {

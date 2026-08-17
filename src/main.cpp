@@ -44,6 +44,10 @@ struct Config {
 
     char urlLocalCatanSta[256] = "http://192.168.4.1/rollDice"; // called when in STA mode
     char urlHomeSta[256]       = "http://catan.mydomain.eu/rollDice"; // called when in STA mode
+
+    // Web server HTTP Basic Auth credentials
+    char webUsername[32] = "admin";
+    char webPassword[64] = "catandice";
 };
 
 static Config cfg;
@@ -58,7 +62,7 @@ void loadConfig() {
     File f = LittleFS.open(CONFIG_FILE, "r");
     if (!f) return;
 
-    StaticJsonDocument<768> doc;
+    StaticJsonDocument<1024> doc;
     if (deserializeJson(doc, f) != DeserializationError::Ok) { f.close(); return; }
     f.close();
 
@@ -70,6 +74,8 @@ void loadConfig() {
     strlcpy(cfg.staHomePassword,        doc["staHomePassword"]          | cfg.staHomePassword,      sizeof(cfg.staHomePassword));
     strlcpy(cfg.urlLocalCatanSta,       doc["urlLocalCatanSta"]         | cfg.urlLocalCatanSta,     sizeof(cfg.urlLocalCatanSta));
     strlcpy(cfg.urlHomeSta,             doc["urlHomeSta"]               | cfg.urlHomeSta,           sizeof(cfg.urlHomeSta));    
+    strlcpy(cfg.webUsername,            doc["webUsername"]              | cfg.webUsername,          sizeof(cfg.webUsername));
+    strlcpy(cfg.webPassword,            doc["webPassword"]              | cfg.webPassword,          sizeof(cfg.webPassword));
     
     cfg.staPrimary = doc["staPrimary"] | cfg.staPrimary;
     if (cfg.staPrimary != 1 && cfg.staPrimary != 2) cfg.staPrimary = 1;
@@ -80,7 +86,7 @@ void saveConfig() {
     File f = LittleFS.open(CONFIG_FILE, "w");
     if (!f) return;
 
-    StaticJsonDocument<768> doc;
+    StaticJsonDocument<1024> doc;
     doc["apSsid"]      = cfg.apSsid;
     doc["apPassword"]  = cfg.apPassword;
     doc["staLocalCatanSsid"]     = cfg.staLocalCatanSsid;
@@ -90,6 +96,8 @@ void saveConfig() {
     doc["staPrimary"]  = cfg.staPrimary;
     doc["urlLocalCatanSta"] = cfg.urlLocalCatanSta;
     doc["urlHomeSta"]       = cfg.urlHomeSta;
+    doc["webUsername"]      = cfg.webUsername;
+    doc["webPassword"]      = cfg.webPassword;
 
     serializeJson(doc, f);
     f.close();
@@ -117,7 +125,14 @@ void rollDice() {
 }
 
 //  Web UI handlers 
+bool requireAuthentication() {
+    if (server.authenticate(cfg.webUsername, cfg.webPassword)) return true;
+    server.requestAuthentication();
+    return false;
+}
+
 void handleRoot() {
+    if (!requireAuthentication()) return;
     if (LittleFS.exists("/index.html")) {
         File f = LittleFS.open("/index.html", "r");
         server.streamFile(f, "text/html");
@@ -128,13 +143,16 @@ void handleRoot() {
 }
 
 void handleGetConfig() {
-    StaticJsonDocument<768> doc;
+    if (!requireAuthentication()) return;
+
+    StaticJsonDocument<1024> doc;
     doc["apSsid"]                   = cfg.apSsid;
     doc["staLocalCatanSsid"]        = cfg.staLocalCatanSsid;
     doc["staHomeSsid"]              = cfg.staHomeSsid;
     doc["staPrimary"]               = cfg.staPrimary;
     doc["urlLocalCatanSta"]         = cfg.urlLocalCatanSta;
     doc["urlHomeSta"]               = cfg.urlHomeSta;
+    doc["webUsername"]              = cfg.webUsername;
     doc["mode"]                     = apMode ? "ap" : "sta";
 
     String out;
@@ -143,9 +161,10 @@ void handleGetConfig() {
 }
 
 void handleSaveConfig() {
+    if (!requireAuthentication()) return;
     if (!server.hasArg("plain")) { server.send(400, "text/plain", "No body"); return; }
 
-    StaticJsonDocument<768> doc;
+    StaticJsonDocument<1024> doc;
     if (deserializeJson(doc, server.arg("plain")) != DeserializationError::Ok) {
         server.send(400, "text/plain", "Invalid JSON");
         return;
@@ -163,12 +182,29 @@ void handleSaveConfig() {
     }
     if (doc.containsKey("urlLocalCatanSta")) strlcpy(cfg.urlLocalCatanSta, doc["urlLocalCatanSta"], sizeof(cfg.urlLocalCatanSta));
     if (doc.containsKey("urlHomeSta"))       strlcpy(cfg.urlHomeSta,       doc["urlHomeSta"],       sizeof(cfg.urlHomeSta));
+    if (doc.containsKey("webUsername")) {
+        const char* username = doc["webUsername"] | "";
+        if (strlen(username) == 0) {
+            server.send(400, "text/plain", "Web username cannot be empty");
+            return;
+        }
+        strlcpy(cfg.webUsername, username, sizeof(cfg.webUsername));
+    }
+    if (doc.containsKey("webPassword")) {
+        const char* password = doc["webPassword"] | "";
+        if (strlen(password) < 8) {
+            server.send(400, "text/plain", "Web password must be at least 8 characters");
+            return;
+        }
+        strlcpy(cfg.webPassword, password, sizeof(cfg.webPassword));
+    }
 
     saveConfig();
     server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
 void handleRoll() {
+    if (!requireAuthentication()) return;
     rollDice();
     server.send(200, "application/json", "{\"status\":\"rolling\"}");
 }
@@ -259,6 +295,7 @@ void setup() {
 
     // Serve static files from LittleFS
     server.onNotFound([]() {
+        if (!requireAuthentication()) return;
         String path = server.uri();
         if (LittleFS.exists(path)) {
             File f = LittleFS.open(path, "r");
