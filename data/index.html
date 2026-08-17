@@ -27,29 +27,49 @@
 </style>
 </head>
 <body>
-<h1>🎲 Catan Dice</h1>
+<h1>Catan Dice</h1>
 <p style="text-align:center">
   Current mode: <span id="modeLabel" class="badge">…</span>
 </p>
 
 <fieldset>
-  <legend>📡 AP (Access Point) Mode</legend>
+  <legend>AP (Access Point) Mode</legend>
   <label>SSID</label>
   <input type="text" id="apSsid" maxlength="31" placeholder="CatanDice"/>
   <label>Password</label>
   <input type="password" id="apPassword" maxlength="63" placeholder="(min 8 chars or blank for open)"/>
-  <label>Roll URL (used in AP mode)</label>
-  <input type="url" id="urlAp" maxlength="255" placeholder="http://192.168.4.2/roll"/>
 </fieldset>
 
 <fieldset>
-  <legend>🏠 Home WiFi (STA) Mode</legend>
-  <label>SSID</label>
-  <input type="text" id="staSsid" maxlength="31" placeholder="HomeNetwork"/>
-  <label>Password</label>
-  <input type="password" id="staPassword" maxlength="63"/>
+  <legend>WiFi (STA) Mode</legend>
+  <p style="margin:4px 0 10px; color:#555; font-size:.9em;">
+    The selected primary profile is tried first. If it fails, the other profile is tried. After which the device will fall back to ad-hoc AP mode.
+  </p>
+
+  <label style="margin-top:0">Primary profile to try first</label>
+  <label style="display:flex; align-items:center; gap:8px; margin:6px 0 2px;">
+    <input type="radio" name="staPrimary" value="1" checked />
+    Local Catan WiFi
+  </label>
+  <label style="display:flex; align-items:center; gap:8px; margin:2px 0 10px;">
+    <input type="radio" name="staPrimary" value="2" />
+    Home WiFi
+  </label>
+
+  <label>Local Catan WiFi SSID</label>
+  <input type="text" id="staLocalCatanSsid" maxlength="31" placeholder="HomeNetwork"/>
+  <label>Local Catan WiFi Password</label>
+  <input type="password" id="staLocalCatanPassword" maxlength="63"/>
   <label>Roll URL (used in STA mode)</label>
-  <input type="url" id="urlSta" maxlength="255" placeholder="http://192.168.1.100/roll"/>
+  <input type="url" id="urlLocalCatanSta" maxlength="255" placeholder="http://192.168.4.1/rollDice"/>
+
+  <label>Home WiFi SSID</label>
+  <input type="text" id="staHomeSsid" maxlength="31" placeholder="BackupNetwork"/>
+  <label>Home WiFi Password</label>
+  <input type="password" id="staHomePassword" maxlength="63"/>
+  <label>Roll URL (used in STA mode)</label>
+  <input type="url" id="urlHomeSta" maxlength="255" placeholder="http://catan.mydomain.eu/rollDice"/>
+
 </fieldset>
 
 <button id="saveBtn">💾 Save Configuration</button>
@@ -59,13 +79,16 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const fields = ['apSsid','apPassword','urlAp','staSsid','staPassword','urlSta'];
+const fields = ['apSsid','apPassword','staLocalCatanSsid','staLocalCatanPassword','staHomeSsid','staHomePassword','urlLocalCatanSta','urlHomeSta'];
 
 async function loadConfig() {
   try {
     const r = await fetch('/config');
     const d = await r.json();
     fields.forEach(k => { if (d[k] !== undefined) $(k).value = d[k]; });
+    const primary = String(d.staPrimary || 1);
+    const selected = document.querySelector(`input[name="staPrimary"][value="${primary}"]`);
+    if (selected) selected.checked = true;
     const lbl = $('modeLabel');
     lbl.textContent = d.mode === 'ap' ? 'AP' : 'STA';
     lbl.className   = 'badge ' + (d.mode === 'ap' ? 'ap' : 'sta');
@@ -75,6 +98,8 @@ async function loadConfig() {
 $('saveBtn').addEventListener('click', async () => {
   const payload = {};
   fields.forEach(k => payload[k] = $(k).value);
+  const primary = document.querySelector('input[name="staPrimary"]:checked');
+  payload.staPrimary = primary ? Number(primary.value) : 1;
   try {
     const r = await fetch('/config', {
       method: 'POST',

@@ -17,28 +17,40 @@
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 
-// ── Pin definitions ──────────────────────────────────────────────────────────
-static const uint8_t PIN_MODE_SWITCH = D5; // LOW = AP, HIGH = STA
-static const uint8_t PIN_BUTTON      = D6; // active LOW
+// Constants for button debounce state
+static bool     lastButtonState  = HIGH;
+static unsigned long lastDebounce = 0;
+static const unsigned long DEBOUNCE_MS = 50;
 
-// ── Configuration defaults ───────────────────────────────────────────────────
+// Pin definitions 
+static const uint8_t PIN_BUTTON      = D5; // active LOW (Push button to roll dice)
+
+// Config defaults
 struct Config {
-    // AP mode
+    // Ad-hoc AP mode
     char apSsid[32]     = "CatanDice";
     char apPassword[64] = "catandice";
-    char urlAp[256]     = "http://192.168.4.1/roll"; // called when in AP mode
 
-    // STA (home WiFi) mode
-    char staSsid[32]     = "";
-    char staPassword[64] = "";
-    char urlSta[256]     = "http://192.168.1.100/roll"; // called when in STA mode
+    // STA profile 1 (home WiFi)
+    char staLocalCatanSsid[32]     = "";
+    char staLocalCatanPassword[64] = "";
+
+    // STA profile 2 (secondary WiFi)
+    char staHomeSsid[32]     = "";
+    char staHomePassword[64] = "";
+
+    // Preferred first profile when connecting in STA mode (1 or 2)
+    uint8_t staPrimary    = 1;
+
+    char urlLocalCatanSta[256] = "http://192.168.4.1/rollDice"; // called when in STA mode
+    char urlHomeSta[256]       = "http://catan.mydomain.eu/rollDice"; // called when in STA mode
 };
 
 static Config cfg;
 static ESP8266WebServer server(80);
 static bool apMode = false;
 
-// ── Config persistence ───────────────────────────────────────────────────────
+// Config persistence
 static const char* CONFIG_FILE = "/config.json";
 
 void loadConfig() {
@@ -46,37 +58,46 @@ void loadConfig() {
     File f = LittleFS.open(CONFIG_FILE, "r");
     if (!f) return;
 
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<768> doc;
     if (deserializeJson(doc, f) != DeserializationError::Ok) { f.close(); return; }
     f.close();
 
     strlcpy(cfg.apSsid,      doc["apSsid"]      | cfg.apSsid,      sizeof(cfg.apSsid));
     strlcpy(cfg.apPassword,  doc["apPassword"]  | cfg.apPassword,  sizeof(cfg.apPassword));
-    strlcpy(cfg.urlAp,       doc["urlAp"]       | cfg.urlAp,       sizeof(cfg.urlAp));
-    strlcpy(cfg.staSsid,     doc["staSsid"]     | cfg.staSsid,     sizeof(cfg.staSsid));
-    strlcpy(cfg.staPassword, doc["staPassword"] | cfg.staPassword,  sizeof(cfg.staPassword));
-    strlcpy(cfg.urlSta,      doc["urlSta"]      | cfg.urlSta,       sizeof(cfg.urlSta));
+    strlcpy(cfg.staLocalCatanSsid,     doc["staLocalCatanSsid"]     | cfg.staLocalCatanSsid,     sizeof(cfg.staLocalCatanSsid));
+    strlcpy(cfg.staLocalCatanPassword, doc["staLocalCatanPassword"] | cfg.staLocalCatanPassword,  sizeof(cfg.staLocalCatanPassword));
+    strlcpy(cfg.staHomeSsid,    doc["staHomeSsid"]    | cfg.staHomeSsid,    sizeof(cfg.staHomeSsid));
+    strlcpy(cfg.staHomePassword,doc["staHomePassword"]| cfg.staHomePassword,sizeof(cfg.staHomePassword));
+    
+    cfg.staPrimary = doc["staPrimary"] | cfg.staPrimary;
+    if (cfg.staPrimary != 1 && cfg.staPrimary != 2) cfg.staPrimary = 1;
+    strlcpy(cfg.urlLocalCatanSta, doc["urlLocalCatanSta"] | cfg.urlLocalCatanSta, sizeof(cfg.urlLocalCatanSta));
+    strlcpy(cfg.urlHomeSta,       doc["urlHomeSta"]       | cfg.urlHomeSta,       sizeof(cfg.urlHomeSta)); 
 }
 
 void saveConfig() {
     File f = LittleFS.open(CONFIG_FILE, "w");
     if (!f) return;
 
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<768> doc;
     doc["apSsid"]      = cfg.apSsid;
     doc["apPassword"]  = cfg.apPassword;
-    doc["urlAp"]       = cfg.urlAp;
-    doc["staSsid"]     = cfg.staSsid;
-    doc["staPassword"] = cfg.staPassword;
-    doc["urlSta"]      = cfg.urlSta;
+    doc["staLocalCatanSsid"]     = cfg.staLocalCatanSsid;
+    doc["staLocalCatanPassword"] = cfg.staLocalCatanPassword;
+    doc["staHomeSsid"]    = cfg.staHomeSsid;
+    doc["staHomePassword"] = cfg.staHomePassword;
+    doc["staPrimary"]  = cfg.staPrimary;
+    doc["urlLocalCatanSta"] = cfg.urlLocalCatanSta;
+    doc["urlHomeSta"]       = cfg.urlHomeSta;
 
     serializeJson(doc, f);
     f.close();
 }
 
-// ── HTTP GET to roll URL ─────────────────────────────────────────────────────
+// HTTP GET to roll URL 
 void rollDice() {
-    const char* url = apMode ? cfg.urlAp : cfg.urlSta;
+
+    const char* url = (apMode || cfg.staPrimary == 1) ? cfg.urlLocalCatanSta : cfg.urlHomeSta;
     if (strlen(url) == 0) {
         Serial.println("[roll] URL not configured");
         return;
@@ -94,7 +115,7 @@ void rollDice() {
     }
 }
 
-// ── Web UI handlers ──────────────────────────────────────────────────────────
+//  Web UI handlers 
 void handleRoot() {
     if (LittleFS.exists("/index.html")) {
         File f = LittleFS.open("/index.html", "r");
@@ -106,13 +127,16 @@ void handleRoot() {
 }
 
 void handleGetConfig() {
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<768> doc;
     doc["apSsid"]      = cfg.apSsid;
     doc["apPassword"]  = cfg.apPassword;
-    doc["urlAp"]       = cfg.urlAp;
-    doc["staSsid"]     = cfg.staSsid;
-    doc["staPassword"] = cfg.staPassword;
-    doc["urlSta"]      = cfg.urlSta;
+    doc["staLocalCatanSsid"]     = cfg.staLocalCatanSsid;
+    doc["staLocalCatanPassword"] = cfg.staLocalCatanPassword;
+    doc["staHomeSsid"]    = cfg.staHomeSsid;
+    doc["staHomePassword"] = cfg.staHomePassword;
+    doc["staPrimary"]  = cfg.staPrimary;
+    doc["urlLocalCatanSta"] = cfg.urlLocalCatanSta;
+    doc["urlHomeSta"]       = cfg.urlHomeSta;
     doc["mode"]        = apMode ? "ap" : "sta";
 
     String out;
@@ -123,18 +147,24 @@ void handleGetConfig() {
 void handleSaveConfig() {
     if (!server.hasArg("plain")) { server.send(400, "text/plain", "No body"); return; }
 
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<768> doc;
     if (deserializeJson(doc, server.arg("plain")) != DeserializationError::Ok) {
         server.send(400, "text/plain", "Invalid JSON");
         return;
     }
 
-    if (doc.containsKey("apSsid"))      strlcpy(cfg.apSsid,      doc["apSsid"],      sizeof(cfg.apSsid));
-    if (doc.containsKey("apPassword"))  strlcpy(cfg.apPassword,  doc["apPassword"],  sizeof(cfg.apPassword));
-    if (doc.containsKey("urlAp"))       strlcpy(cfg.urlAp,       doc["urlAp"],       sizeof(cfg.urlAp));
-    if (doc.containsKey("staSsid"))     strlcpy(cfg.staSsid,     doc["staSsid"],     sizeof(cfg.staSsid));
-    if (doc.containsKey("staPassword")) strlcpy(cfg.staPassword, doc["staPassword"], sizeof(cfg.staPassword));
-    if (doc.containsKey("urlSta"))      strlcpy(cfg.urlSta,      doc["urlSta"],      sizeof(cfg.urlSta));
+    if (doc.containsKey("apSsid"))                  strlcpy(cfg.apSsid,                 doc["apSsid"],      sizeof(cfg.apSsid));
+    if (doc.containsKey("apPassword"))              strlcpy(cfg.apPassword,             doc["apPassword"],  sizeof(cfg.apPassword));
+    if (doc.containsKey("staLocalCatanSsid"))       strlcpy(cfg.staLocalCatanSsid,      doc["staLocalCatanSsid"],     sizeof(cfg.staLocalCatanSsid));
+    if (doc.containsKey("staLocalCatanPassword"))   strlcpy(cfg.staLocalCatanPassword,  doc["staLocalCatanPassword"], sizeof(cfg.staLocalCatanPassword));
+    if (doc.containsKey("staHomeSsid"))             strlcpy(cfg.staHomeSsid,            doc["staHomeSsid"],    sizeof(cfg.staHomeSsid));
+    if (doc.containsKey("staHomePassword"))         strlcpy(cfg.staHomePassword,        doc["staHomePassword"],sizeof(cfg.staHomePassword));
+    if (doc.containsKey("staPrimary")) {
+        int primary = doc["staPrimary"];
+        if (primary == 1 || primary == 2) cfg.staPrimary = primary;
+    }
+    if (doc.containsKey("urlLocalCatanSta")) strlcpy(cfg.urlLocalCatanSta, doc["urlLocalCatanSta"], sizeof(cfg.urlLocalCatanSta));
+    if (doc.containsKey("urlHomeSta"))       strlcpy(cfg.urlHomeSta,       doc["urlHomeSta"],       sizeof(cfg.urlHomeSta));
 
     saveConfig();
     server.send(200, "application/json", "{\"status\":\"ok\"}");
@@ -145,7 +175,7 @@ void handleRoll() {
     server.send(200, "application/json", "{\"status\":\"rolling\"}");
 }
 
-// ── WiFi setup ───────────────────────────────────────────────────────────────
+// WiFi setup
 void startAP() {
     WiFi.mode(WIFI_AP);
     WiFi.softAP(cfg.apSsid, cfg.apPassword);
@@ -153,47 +183,77 @@ void startAP() {
                   cfg.apSsid, WiFi.softAPIP().toString().c_str());
 }
 
-void startSTA() {
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(cfg.staSsid, cfg.staPassword);
-    Serial.printf("[wifi] Connecting to %s", cfg.staSsid);
+
+// Connect to STA profile, returns true if connected
+bool connectSTAProfile(const char* label, const char* ssid, const char* password) {
+    if (strlen(ssid) == 0) {
+        Serial.printf("[wifi] %s skipped (empty SSID)\n", label);
+        return false;
+    }
+
+    WiFi.begin(ssid, password);
+    Serial.printf("[wifi] Connecting (%s) to %s", label, ssid);
     unsigned long t = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t < 15000) {
         delay(500);
         Serial.print('.');
     }
+
     if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("\n[wifi] Connected  IP=%s\n", WiFi.localIP().toString().c_str());
+        Serial.printf("\n[wifi] Connected (%s) IP=%s\n", label, WiFi.localIP().toString().c_str());
+        return true;
+    }
+
+    Serial.printf("\n[wifi] %s failed\n", label);
+    WiFi.disconnect();
+    delay(100);
+    return false;
+}
+
+// Start STA mode, try both profiles, fallback to AP if both fail
+void startSTA() {
+    WiFi.mode(WIFI_STA);
+
+    bool connected = false;
+    if (cfg.staPrimary == 2) {
+        connected = connectSTAProfile("STA Home Profile", cfg.staHomeSsid, cfg.staHomePassword);
+        if (!connected) {
+            connected = connectSTAProfile("STA Local Catan Profile", cfg.staLocalCatanSsid, cfg.staLocalCatanPassword);
+        }
     } else {
+        connected = connectSTAProfile("STA Local Catan Profile", cfg.staLocalCatanSsid, cfg.staLocalCatanPassword);
+        if (!connected) {
+            connected = connectSTAProfile("STA Home Profile", cfg.staHomeSsid, cfg.staHomePassword);
+        }
+    }
+
+    if (!connected) {
         Serial.println("\n[wifi] STA failed, falling back to AP");
         startAP();
         apMode = true;
+    } else {
+        apMode = false;
     }
 }
 
-// ── Arduino entry points ─────────────────────────────────────────────────────
+// Arduino entry points
 void setup() {
     Serial.begin(115200);
     delay(200);
 
-    pinMode(PIN_MODE_SWITCH, INPUT_PULLUP);
+    // Configure button pin
     pinMode(PIN_BUTTON,      INPUT_PULLUP);
 
+    // Mount LittleFS and load config
     if (!LittleFS.begin()) {
         Serial.println("[fs] LittleFS mount failed");
     }
     loadConfig();
 
-    // Read switch: LOW = AP mode
-    apMode = (digitalRead(PIN_MODE_SWITCH) == LOW);
-    Serial.printf("[mode] %s\n", apMode ? "AP" : "STA");
+    // Start WiFi in STA, if fails, fallback to AP mode
+    startSTA();
 
-    if (apMode) {
-        startAP();
-    } else {
-        startSTA();
-    }
-
+    // Setup HTTP server routes
     server.on("/",           HTTP_GET,  handleRoot);
     server.on("/config",     HTTP_GET,  handleGetConfig);
     server.on("/config",     HTTP_POST, handleSaveConfig);
@@ -220,11 +280,7 @@ void setup() {
     Serial.println("[http] Server started on port 80");
 }
 
-// Button debounce state
-static bool     lastButtonState  = HIGH;
-static unsigned long lastDebounce = 0;
-static const unsigned long DEBOUNCE_MS = 50;
-
+// Main loop
 void loop() {
     server.handleClient();
 

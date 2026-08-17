@@ -17,6 +17,8 @@ No external pull-up resistors needed (internal pull-ups are used).
 
 * **AP mode** – the ESP creates its own WiFi network so you can connect without a router.
 * **STA mode** – the ESP connects to your home WiFi.
+* **Dual STA profiles** – configure two STA WiFi profiles and choose which one is tried first.
+* **STA fallback order** – try selected primary STA profile, then the other profile, then AP mode.
 * Separate roll URLs for AP and STA modes.
 * Web UI served from LittleFS to configure SSIDs, passwords and URLs at runtime.
 * Config persisted in `/config.json` on the filesystem (survives reboots).
