@@ -53,6 +53,7 @@ struct Config {
 static Config cfg;
 static ESP8266WebServer server(80);
 static bool apMode = false;
+static uint8_t connectedProfile = 0; // 0= Ad-hoc AP, 1= Local Catan STA, 2= Home STA
 
 // Config persistence
 static const char* CONFIG_FILE = "/config.json";
@@ -106,7 +107,17 @@ void saveConfig() {
 // HTTP GET to roll URL 
 void rollDice() {
 
-    const char* url = (cfg.staPrimary == 1) ? cfg.urlLocalCatanSta : cfg.urlHomeSta;
+    // Get the URL to call based on the connected profile
+    const char* url = nullptr;
+    if (connectedProfile == 1){
+        const char* url = cfg.urlLocalCatanSta;
+    }else if (connectedProfile == 2){
+        const char* url = cfg.urlHomeSta;
+    } else {
+        Serial.println("[roll] Not in STA mode, skipping roll");
+        return;
+    }
+
     if (strlen(url) == 0) {
         Serial.println("[roll] URL not configured");
         return;
@@ -251,13 +262,17 @@ void startSTA() {
     bool connected = false;
     if (cfg.staPrimary == 2) {
         connected = connectSTAProfile("STA Home Profile", cfg.staHomeSsid, cfg.staHomePassword);
+        if (connected) {connectedProfile = 2;}
         if (!connected) {
             connected = connectSTAProfile("STA Local Catan Profile", cfg.staLocalCatanSsid, cfg.staLocalCatanPassword);
+            if (connected) {connectedProfile = 1;}
         }
     } else {
         connected = connectSTAProfile("STA Local Catan Profile", cfg.staLocalCatanSsid, cfg.staLocalCatanPassword);
+        if (connected) {connectedProfile = 1;}
         if (!connected) {
             connected = connectSTAProfile("STA Home Profile", cfg.staHomeSsid, cfg.staHomePassword);
+            if (connected) {connectedProfile = 2;}
         }
     }
 
@@ -265,6 +280,7 @@ void startSTA() {
         Serial.println("\n[wifi] STA failed, falling back to AP");
         startAP();
         apMode = true;
+        connectedProfile = 0; // Ad-hoc AP
     } else {
         apMode = false;
     }
