@@ -7,11 +7,32 @@ Press the button → the ESP performs an HTTP GET to a configured URL (your game
 
 | Component | D1 Mini pin | Notes |
 |-----------|-------------|-------|
-| Mode switch | **D5** (GPIO 14) | LOW = AP mode · HIGH = home WiFi (STA) mode |
-| Roll button | **D6** (GPIO 12) | Active LOW, internal pull-up enabled |
+| Roll button | **D5** (GPIO 14) | Active LOW, internal pull-up enabled |
 
-Wire each component between the pin and GND.  
-No external pull-up resistors needed (internal pull-ups are used).
+The roll button uses the D1 Mini's internal pull-up, so no external pull-up resistor is
+needed.
+
+### Assembly and Wiring
+
+1. Stack the Wemos Li-ion Battery Shield on top of the Wemos D1 Mini.
+2. Wire the push-button switch between **D5** (GPIO 14) and **GND**.
+3. Wire the button LED between **GND** and **5V** on the battery shield.
+4. Connect the battery to the battery shield. Cut the battery's positive wire and put the
+	SPST switch in series between the two cut ends. Adding connectors to the battery cable can
+	make this connection easier and allow the battery to be disconnected.
+
+The switch must be turned on for the battery to charge. To charge the battery, connect a USB
+cable to the USB port on the battery shield while the switch is on.
+
+### Hardware Used
+
+All hardware was bought at [TinyTronics](https://tinytronics.nl/):
+
+* PKCELL Li-Po Battery 3.7V 2000mAh – JST-PH – LP803860
+* Metal Push Button 16mm – Reset – with 3-6V Green LED – with Cable
+* Xurui XT-11A Toggle Switch – SPST
+* Wemos Li-ion Battery Shield for D1 Mini (Lolin v1.3.0)
+* Wemos D1 Mini V4 – ESP8266 – CH340 (Lolin)
 
 ## Features
 
@@ -19,6 +40,7 @@ No external pull-up resistors needed (internal pull-ups are used).
 * **STA mode** – the ESP connects to your home WiFi.
 * **Dual STA profiles** – configure two STA WiFi profiles and choose which one is tried first.
 * **STA fallback order** – try selected primary STA profile, then the other profile, then AP mode.
+* The first STA profile is by default configured for the smart-catan ad hoc access point. See [CoolSaet/smart-catan](https://github.com/CoolSaet/smart-catan).
 * Separate roll URLs for AP and STA modes.
 * Web UI served from LittleFS to configure SSIDs, passwords and URLs at runtime.
 * HTTP Basic Authentication protects the web UI, configuration API and browser roll endpoint.
@@ -88,7 +110,7 @@ curl --user admin:catandice http://192.168.4.1/config
 |---------|---------|
 | AP SSID | `CatanDice` |
 | AP Password | `catandice` |
-| Local Catan WiFi SSID | `LocalCatanWiFi` |
+| First STA profile SSID | `LocalCatanWiFi` (smart-catan ad hoc access point) |
 | Local Catan WiFi password | `LocalCatanPass` |
 | Local Catan WiFi roll URL | `http://192.168.4.1/rollDice` |
 | Home WiFi SSID | *(empty)* |
