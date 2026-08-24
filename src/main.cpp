@@ -110,9 +110,9 @@ void rollDice() {
     // Get the URL to call based on the connected profile
     const char* url = nullptr;
     if (connectedProfile == 1){
-        const char* url = cfg.urlLocalCatanSta;
+        url = cfg.urlLocalCatanSta;
     }else if (connectedProfile == 2){
-        const char* url = cfg.urlHomeSta;
+        url = cfg.urlHomeSta;
     } else {
         Serial.println("[roll] Not in STA mode, skipping roll");
         return;
